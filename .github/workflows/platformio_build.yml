@@ -1,0 +1,41 @@
+name: PlatformIO CI
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Install esptools.py
+        run: pip install --upgrade esptool
+
+      - name: Build PlatformIO Project
+        run: pio run
+      
+      - name: Build LittleFS
+        run: pio run --target buildfs --environment esp32dev 
+
+      - name: Combine  bootloader, boot_app0, partition, filesystem and firmware into one factory image
+        run: esptool --chip esp32 merge_bin -o .pio/build/esp32dev/firmware.factory.bin --flash-mode dio --flash-freq 40m --flash-size 4MB 0x1000 .pio/build/esp32dev/bootloader.bin 0x8000 .pio/build/esp32dev/partitions.bin 0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin 0x10000 .pio/build/esp32dev/firmware.bin 0x290000 .pio/build/esp32dev/littlefs.bin
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path:  .pio/build/esp32dev/firmware.factory.bin
